@@ -1,6 +1,6 @@
 from typing import Any, Dict
-from langchain.llms import Ollama
-from langchain.chat_models import ChatOpenAI
+from langchain_community.llms import Ollama
+from langchain_openai import ChatOpenAI
 from langchain.schema import BaseMessage
 from src.config import get_settings
 
