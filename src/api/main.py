@@ -1,9 +1,12 @@
+import logging
 import traceback
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from uuid import uuid4
+from datetime import datetime
 
-from src.api.schemas import BFTRequest, BFTResponse, RAGDocumentRequest, RAGDocumentResponse, HistoryListResponse, HistoryDetailResponse
+from src.api.schemas import BFTRequest, BFTResponse, RAGDocumentRequest, RAGDocumentResponse, HistoryListResponse, HistoryDetailResponse, RagUploadResponse
 
 from src.core.pipeline import process_bft
 from src.db.base import init_db
@@ -13,6 +16,10 @@ from src.retrieval.hybrid import (
     get_hybrid_retrieval_manager,
 )
 from src.db import crud
+from langchain_core.documents import Document
+
+
+logging.basicConfig(filename='./tmp/app.log', level=logging.INFO)
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -55,7 +62,7 @@ def analyze_bft(request: BFTRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     
-@app.post(f"{settings.api_prefix}/rag/documents", response_model=RAGDocumentResponse)
+@app.post(f"{settings.api_prefix}/rag/documents/ingest", response_model=RAGDocumentResponse)
 def ingest_rag_document(request: RAGDocumentRequest):
     try:
         manager = get_hybrid_retrieval_manager()
@@ -125,4 +132,108 @@ def get_history_detail(history_id: int):
         raw_llm_output=entry.raw_llm_output,
         retrieved_context=entry.retrieved_context,
         created_at=entry.created_at,
-    )    
+    )
+    
+@app.post(f"{settings.api_prefix}/rag/documents", response_model=RagUploadResponse)
+async def upload_rag_documents(
+    files: list[UploadFile] = File(default_factory=list),
+    text: str = Form(default=""),
+    auto_process: bool = Form(default=True),
+):
+    if not files and not text.strip():
+        raise HTTPException(status_code=400, detail="Нужно передать файл или текст.")
+
+    retrieval_manager = get_hybrid_retrieval_manager()
+    ingested: list[dict[str, Any]] = []
+
+    for upload in files:
+        content = await upload.read()
+        doc_id = f"doc-{uuid4().hex}"
+
+        retrieval_manager.add_documents(
+            [
+                Document(
+                    page_content=content.decode("utf-8", errors="ignore"),
+                    metadata={
+                        "doc_id": doc_id,
+                        "filename": upload.filename,
+                        "ingested_at": datetime.utcnow().isoformat(),
+                        "source": "file_upload",
+                    },
+                )
+            ]
+        )
+
+        ingested.append(
+            {
+                "doc_id": doc_id,
+                "filename": upload.filename,
+                "size_bytes": len(content),
+                "status": "processed" if auto_process else "pending",
+                "uploaded_at": datetime.utcnow(),
+            }
+        )
+
+    if text.strip():
+        doc_id = f"text-{uuid4().hex}"
+        retrieval_manager.add_documents(
+            [
+                Document(
+                    page_content=text,
+                    metadata={
+                        "doc_id": doc_id,
+                        "filename": "manual_text.md",
+                        "ingested_at": datetime.utcnow().isoformat(),
+                        "source": "manual_text",
+                    },
+                )
+            ]
+        )
+        ingested.append(
+            {
+                "doc_id": doc_id,
+                "filename": "manual_text.md",
+                "size_bytes": len(text.encode("utf-8")),
+                "status": "processed" if auto_process else "pending",
+                "uploaded_at": datetime.utcnow(),
+            }
+        )
+
+    return RagUploadResponse(documents=ingested)    
+    
+
+@app.post(f"{settings.api_prefix}/rag/documents/text", response_model=RagUploadResponse)
+async def upload_rag_documents(
+    text: str = Form(default=""),
+    auto_process: bool = Form(default=True),
+):
+    retrieval_manager = get_hybrid_retrieval_manager()
+    ingested: list[dict[str, Any]] = []
+
+    if text.strip():
+        doc_id = f"text-{uuid4().hex}"
+        retrieval_manager.add_documents(
+            [
+                Document(
+                    page_content=text,
+                    metadata={
+                        "doc_id": doc_id,
+                        "filename": "manual_text.md",
+                        "ingested_at": datetime.utcnow().isoformat(),
+                        "source": "manual_text",
+                    },
+                )
+            ]
+        )
+        ingested.append(
+            {
+                "doc_id": doc_id,
+                "filename": "manual_text.md",
+                "size_bytes": len(text.encode("utf-8")),
+                "status": "processed" if auto_process else "pending",
+                "uploaded_at": datetime.utcnow(),
+            }
+        )
+
+    return RagUploadResponse(documents=ingested)    
+    

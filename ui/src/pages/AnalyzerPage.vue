@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import BftForm, { type BftFormPayload } from "../components/BftForm.vue";
 import ResultViewer from "../components/ResultViewer.vue";
 import HistoryList from "../components/HistoryList.vue";
@@ -41,6 +41,22 @@ const activeHistoryId = ref<number | null>(null);
 const formBftId = ref<string | null>(null);
 const formText = ref<string | null>(null);
 
+type ViewMode = "landing" | "result";
+const viewMode = ref<ViewMode>("landing");
+
+const resultCreatedAt = computed(() => {
+  if (!result.value?.created_at) return null;
+  const date = new Date(result.value.created_at);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+});
+
 const fetchHistoryList = async () => {
   historyLoading.value = true;
   try {
@@ -74,6 +90,7 @@ const loadHistoryDetail = async (id: number) => {
     activeHistoryId.value = payload.id;
     formBftId.value = payload.bft_id;
     formText.value = payload.request_text;
+    viewMode.value = "result";
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Неизвестная ошибка";
     console.error(err);
@@ -99,11 +116,11 @@ const handleSubmit = async (payload: BftFormPayload) => {
     result.value = data;
     activeHistoryId.value = data.history_id;
 
-    // Обновляем форму
     formBftId.value = payload.bft_id;
     formText.value = payload.text;
 
     await fetchHistoryList();
+    viewMode.value = "result";
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Неизвестная ошибка";
     console.error(err);
@@ -112,56 +129,67 @@ const handleSubmit = async (payload: BftFormPayload) => {
   }
 };
 
-const loadLatest = async () => {
-  try {
-    const response = await fetch("http://localhost:8000/api/v1/history/latest");
-    if (!response.ok) {
-      throw new Error(`Ошибка загрузки последнего анализа: ${await response.text()}`);
-    }
-    const payload = (await response.json()) as HistoryDetail | null;
-    if (payload) {
-      result.value = {
-        bft_id: payload.bft_id,
-        structured_output: payload.structured_output,
-        artifacts: payload.artifacts,
-        history_id: payload.id,
-        created_at: payload.created_at,
-      };
-      activeHistoryId.value = payload.id;
-      formBftId.value = payload.bft_id;
-      formText.value = payload.request_text;
-    }
-  } catch (err) {
-    console.warn("Последний анализ не найден:", err);
-  }
+const backToLanding = () => {
+  viewMode.value = "landing";
+  result.value = null;
+  activeHistoryId.value = null;
 };
 
 onMounted(async () => {
-  await Promise.all([fetchHistoryList(), loadLatest()]);
+  await fetchHistoryList();
 });
 </script>
 
 <template>
-  <div class="analyzer-layout">
-    <section class="form-column">
-      <BftForm
-        :loading="loading"
-        :initial-bft-id="formBftId"
-        :initial-text="formText"
-        @submit="handleSubmit"
-      />
+  <div class="analyzer-page">
+    <section v-if="viewMode === 'landing'" class="landing-view">
+      <header class="landing-header">
+        <div>
+          <h1>Анализ БФТ</h1>
+          <p>
+            Подготовьте ID и описание бизнес-функционального требования. Система сравнит его
+            с корпоративной базой знаний и сформирует интеграционную архитектуру.
+          </p>
+        </div>
+      </header>
+
+      <div class="landing-grid">
+        <section class="form-column">
+          <BftForm
+            :loading="loading"
+            :initial-bft-id="formBftId"
+            :initial-text="formText"
+            @submit="handleSubmit"
+          />
+        </section>
+
+        <section class="history-column">
+          <HistoryList
+            :items="historyItems"
+            :active-id="activeHistoryId"
+            :loading="historyLoading"
+            @select="loadHistoryDetail"
+          />
+        </section>
+      </div>
     </section>
 
-    <section class="history-column">
-      <HistoryList
-        :items="historyItems"
-        :active-id="activeHistoryId"
-        :loading="historyLoading"
-        @select="loadHistoryDetail"
-      />
-    </section>
+    <section v-else class="result-view">
+      <div class="result-top-bar">
+        <button type="button" class="back-button" @click="backToLanding">
+          ← Вернуться к началу
+        </button>
 
-    <section class="results-column">
+        <div v-if="result" class="result-meta">
+          <span class="meta-chip">
+            BFT ID: <strong>{{ result.bft_id }}</strong>
+          </span>
+          <span v-if="resultCreatedAt" class="meta-chip">
+            Анализ от: <strong>{{ resultCreatedAt }}</strong>
+          </span>
+        </div>
+      </div>
+
       <ResultViewer
         :loading="loading"
         :error="error"
@@ -172,16 +200,86 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.analyzer-layout {
+.analyzer-page {
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(340px, 1fr) minmax(260px, 0.8fr) minmax(420px, 1.4fr);
+}
+
+.landing-view {
+  display: grid;
+  gap: 28px;
+}
+
+.landing-header h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.01em;
+}
+
+.landing-header p {
+  margin: 10px 0 0;
+  color: rgba(21, 31, 66, 0.75);
+  max-width: 720px;
+  line-height: 1.55;
+}
+
+.landing-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(340px, 1fr) minmax(320px, 0.9fr);
   align-items: start;
 }
 
 .form-column,
-.history-column,
-.results-column {
+.history-column {
   display: grid;
+}
+
+.result-view {
+  display: grid;
+  gap: 20px;
+}
+
+.result-top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.back-button {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  background: rgba(62, 116, 229, 0.14);
+  color: #2c3faa;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+.back-button:hover {
+  background: rgba(62, 116, 229, 0.22);
+  transform: translateY(-1px);
+}
+
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.meta-chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(24, 36, 82, 0.08);
+  color: rgba(24, 36, 82, 0.85);
+  font-size: 0.9rem;
+}
+.meta-chip strong {
+  font-weight: 700;
 }
 </style>

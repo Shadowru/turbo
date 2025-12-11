@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from src.config import get_settings
 from src.ingestion.preprocessor import clean_text, chunk_text
@@ -7,9 +7,32 @@ from src.retrieval.hybrid import (
     build_bft_documents,
     get_hybrid_retrieval_manager,
 )
+from src.retrieval.utils import extract_known_systems, unwrap_document
 
 settings = get_settings()
 
+
+def build_context(documents, known_systems):
+    parts = []
+
+    if known_systems:
+         systems_block = ["KNOWN SYSTEMS:\n"]
+         for sys in known_systems:
+             alias_part = f" (alias: {sys['alias']})" if sys.get("alias") else ""
+             systems_block.append(
+                 f"- System ID: {sys['system_id']}, Name: {sys['system_name']}{alias_part}"
+             )
+         parts.append("\n".join(systems_block))
+
+    for doc in documents:
+        if isinstance(doc, str):
+            text = doc
+        else:
+            _, text = unwrap_document(doc)
+        if text:
+            parts.append(text)
+
+    return "\n\n---\n\n".join(parts)
 
 def run_bft_analysis(bft_id: str, raw_text: str) -> Dict[str, Any]:
     cleaned = clean_text(raw_text)
@@ -30,7 +53,8 @@ def run_bft_analysis(bft_id: str, raw_text: str) -> Dict[str, Any]:
         source = doc.metadata.get("source", "unknown")
         context_blocks.append(f"[source={source} id={doc_id}]\n{doc.page_content}")
 
-    context = "\n\n".join(context_blocks)
+    known_systems = extract_known_systems(documents)
+    context = build_context(context_blocks, known_systems)#"\n\n".join(context_blocks)
 
     llm_result = run_architecture_chain(cleaned, context)
 

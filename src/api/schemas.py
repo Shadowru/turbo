@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, Literal
 from pydantic import BaseModel
+from typing import Literal
 from datetime import datetime
 
 class BFTRequest(BaseModel):
@@ -43,3 +44,14 @@ class HistoryDetailResponse(BaseModel):
     raw_llm_output: Optional[str]
     retrieved_context: Optional[str]
     created_at: datetime    
+    
+class RagUploadedDocument(BaseModel):
+    doc_id: str
+    filename: str
+    size_bytes: int
+    status: Literal["processed", "pending", "error"] = "processed"
+    uploaded_at: datetime
+
+
+class RagUploadResponse(BaseModel):
+    documents: list[RagUploadedDocument]    

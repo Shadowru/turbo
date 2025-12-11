@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     bm25_index_path: Path = Field(default=Path("data/bm25_index.json"))
 
     llm_provider: str = "ollama"  # или "openai"
-    ollama_model: str = "gpt-oss:20b"
+    ollama_model: str = "gpt-oss:120b"
     openai_model: str = "gpt-4.1-mini"
     openai_api_url: str = "http://localhost:1143" 
     openai_api_key: str | None = None
