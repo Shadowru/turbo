@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, List
 import re
 import nltk
 from nltk.tokenize import sent_tokenize
@@ -10,7 +10,7 @@ def clean_text(text: str) -> str:
     text = text.replace("\u00a0", " ").strip()
     return text
 
-def chunk_text(text: str, max_tokens: int = 400, overlap: int = 50) -> Iterable[str]:
+def chunk_text(text: str, max_tokens: int = 400, overlap: int = 50) -> List[str]:
     sentences = sent_tokenize(text, language="russian")
     chunks, current_chunk = [], []
     token_count = 0

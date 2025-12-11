@@ -1,25 +1,38 @@
-from typing import Any, Dict
-from langchain_community.llms import Ollama
+from typing import List
+from langchain_core.messages import BaseMessage
+
+from langchain_community.chat_models import ChatOllama
 from langchain_openai import ChatOpenAI
-from langchain.schema import BaseMessage
+
 from src.config import get_settings
 
 settings = get_settings()
 
 def get_llm():
     if settings.llm_provider == "ollama":
-        return Ollama(model=settings.ollama_model)
-    elif settings.llm_provider == "openai":
+        return ChatOllama(model=settings.ollama_model, temperature=0.2)
+    if settings.llm_provider == "openai":
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY not configured")
         return ChatOpenAI(
+            base_url=settings.openai_api_url,
             model=settings.openai_model,
             temperature=0.2,
-            openai_api_key=settings.openai_api_key,
+            api_key=settings.openai_api_key,
         )
-    raise ValueError("Unsupported LLM provider") 
+    raise ValueError(f"Unsupported LLM provider: {settings.llm_provider}")
 
-def call_llm(messages: list[BaseMessage]) -> str:
+def call_llm(messages: List[BaseMessage]) -> str:
     llm = get_llm()
-    response = llm(messages)
-    return response.content if hasattr(response, "content") else str(response)
+    response = llm.invoke(messages)
+    
+    #with open("./data/tmp_resp.json", 'r', encoding='utf-8') as file:
+    #    response = file.read()
+    
+    print(response)
+    # Chat-LLM возвращает ChatMessage/AIMessage; извлекаем текст
+    if isinstance(response, str):
+        return response
+    if hasattr(response, "content"):
+        return response.content
+    return str(response)

@@ -1,5 +1,7 @@
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
+from datetime import datetime
+from sqlalchemy import Column, JSON
 
 class System(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -30,3 +32,13 @@ class IntegrationTopic(SQLModel, table=True):
     notes: Optional[str] = None
 
     system: System = Relationship(back_populates="topics")
+    
+class BftAnalysisHistory(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    bft_id: str = Field(index=True)
+    request_text: str
+    structured_output: dict = Field(sa_column=Column(JSON))
+    artifacts: dict = Field(sa_column=Column(JSON))
+    raw_llm_output: Optional[str] = None
+    retrieved_context: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

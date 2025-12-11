@@ -1,20 +1,82 @@
+from textwrap import dedent
 from langchain.prompts import ChatPromptTemplate
-from langchain.schema import AIMessage, HumanMessage
 from src.llm.client import call_llm
 
-SOLUTION_SCHEMA = """
-{
-  "architecture_analysis": {...},
-  "involved_systems": [...],
-  "uml_diagrams": [...],
-  "integration_topics": [...]
-}
-"""
+SOLUTION_SCHEMA = dedent(
+    """
+    {
+      "architecture_analysis": {
+        "business_context": "...",
+        "functional_blocks": [],
+        "non_functional": {},
+        "solution_options": [],
+        "selected_option": null,
+        "risks": [],
+        "dependencies": []
+      },
+      "involved_systems": [
+        {
+          "system_id": "string",
+          "role": "string",
+          "existing": true,
+          "confidence": 0.0,
+          "notes": "string"
+        }
+      ],
+      "uml_diagrams": [
+        {
+          "type": "sequence",
+          "description": "string",
+          "actors": [],
+          "steps": [
+            {"from": "string", "to": "string", "message": "string"}
+          ]
+        },
+        {
+          "type": "component",
+          "systems": [
+            {
+              "system_id": "string",
+              "label": "string",
+              "existing": true,
+              "integrations": [
+                {"target": "string", "label": "string"}
+              ]
+            }
+          ]
+        }
+      ],
+      "integration_topics": [
+        {
+          "topic": "string",
+          "status": "existing",
+          "publisher": "string",
+          "subscriber": ["string"],
+          "payload_schema_ref": "string",
+          "actions": ["string"]
+        }
+      ]
+    }
+    """
+).strip()
 
 def run_architecture_chain(bft_text: str, context: str) -> str:
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Ты — корпоративный архитектор. Отвечай строго в JSON без лишнего текста."),
-        ("human", "БФТ:\n{bft}\n\nКонтекст:\n{context}\n\nСледуй схеме:\n" + SOLUTION_SCHEMA),
-    ])
-    messages = prompt.format_messages(bft=bft_text, context=context)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "Ты — корпоративный архитектор. Отвечай строго чистым JSON, без ``` и без лишнего текста.",
+            ),
+            (
+                "human", 
+                "БФТ:\n{bft}\n\nКонтекст (RAG):\n{context}\n\nВерни JSON по схеме:\n{schema}"
+            )
+        ]
+    )
+
+    messages = prompt.format_messages(
+        bft=bft_text,
+        context=context,
+        schema=SOLUTION_SCHEMA,
+    )
     return call_llm(messages)
