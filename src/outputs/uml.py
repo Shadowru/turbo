@@ -28,50 +28,62 @@ def _escape_label(text: str | None) -> str:
     )
 
 
-def generate_sequence_diagram(diagram_spec: Dict[str, Any]) -> str:
-    lines: List[str] = ["sequenceDiagram"]
-    steps = diagram_spec.get("steps") or []
-    actor_order: List[str] = []
-    seen: set[str] = set()
+def _clean_sequence_text(value: str) -> str:
+    if not value:
+        return ""
+    # убираем CR, переводим все переводы строк в пробелы
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    value = " ".join(value.split())  # схлопнуть множ. пробелы + \n
+    # если боитесь двоеточий — можно экранировать
+    return value.replace(":", "\\:")
 
-    for name in diagram_spec.get("actors") or []:
-        if name and name not in seen:
-            actor_order.append(name)
-            seen.add(name)
+def _sanitize_mermaid_text(value: str) -> str:
+    """Удаляем перевод строки, лишние пробелы и токены стрелок, чтобы Mermaid не ломался."""
+    if not value:
+        return ""
+
+    # 1) схлопываем все переносы, табы и множественные пробелы в одиночный пробел
+    value = re.sub(r"[\r\n\t]+", " ", value)
+    value = re.sub(r"\s{2,}", " ", value)
+
+    # 2) вырезаем мермейдовские стрелки, которые ломают синтаксис
+    arrow_tokens = [
+        "->>", "-->>", "->", "-->", "-x", "--x", "x-", "x--",
+        "<->", "<-->",
+    ]
+    for token in arrow_tokens:
+        value = value.replace(token, "→")  # или "↠" / просто пробел
+
+    # 3) экранируем двоеточия (иначе Mermaid думает, что это синтаксис participants)
+    value = value.replace(":", "\\:")
+
+    return value.strip()
+
+def generate_sequence_diagram(diagram: dict) -> str:
+    participants = diagram.get("participants", [])
+    steps = diagram.get("steps", [])
+    lines = ["sequenceDiagram"]
+
+    for participant in participants:
+        alias = participant.get("alias") or participant.get("id") or participant.get("name")
+        name = participant.get("name") or alias
+        if not alias:
+            continue
+        clean_alias = _sanitize_mermaid_text(alias).replace(" ", "_")
+        clean_name = _sanitize_mermaid_text(name)
+        lines.append(f"    participant {clean_alias} as {clean_name}")
 
     for step in steps:
-        for name in (step.get("from"), step.get("to")):
-            if name and name not in seen:
-                actor_order.append(name)
-                seen.add(name)
-
-    alias_map: Dict[str, str] = {}
-    for idx, name in enumerate(actor_order):
-        alias = _sanitize_identifier(name, f"actor{idx}")
-        alias_map[name] = alias
-        lines.append(f'participant "{_escape_label(name)}" as {alias}')
-
-    def ensure_participant(name: str) -> str:
-        if name not in alias_map:
-            alias = _sanitize_identifier(name, f"actor{len(alias_map)}")
-            alias_map[name] = alias
-            lines.append(f'participant "{_escape_label(name)}" as {alias}')
-        return alias_map[name]
-
-    for step in steps:
-        sender = step.get("from")
-        receiver = step.get("to")
-        if not sender or not receiver:
+        from_participant = step.get("from") or step.get("source")
+        to_participant = step.get("to") or step.get("target")
+        arrow = (step.get("arrow") or "->>").strip()
+        message = _sanitize_mermaid_text(step.get("message") or step.get("description") or "")
+        if not from_participant or not to_participant:
             continue
 
-        sender_alias = ensure_participant(sender)
-        receiver_alias = ensure_participant(receiver)
-
-        message = _escape_label(step.get("message", ""))
-        arrow = step.get("arrow") or "->>"
-        if arrow not in {"->", "-->", "->>", "-->>", "-)", "--)", "->)", "-->"}:
-            arrow = "->>"
-        lines.append(f"{sender_alias} {arrow} {receiver_alias}: {message}")
+        clean_from = _sanitize_mermaid_text(from_participant).replace(" ", "_")
+        clean_to = _sanitize_mermaid_text(to_participant).replace(" ", "_")
+        lines.append(f"    {clean_from} {arrow} {clean_to}: {message}")
 
     return "\n".join(lines)
 

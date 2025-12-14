@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: ${PROJECT_NAME}_traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    env_file:
+      - .env
+
+  db:
+    image: postgres:15-alpine
+    container_name: ${PROJECT_NAME}_db
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    env_file:
+      - .env
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend/Dockerfile
+    image: ${PROJECT_NAME}_backend
+    container_name: ${PROJECT_NAME}_backend
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+
+      # HTTP → HTTPS
+      - "traefik.http.routers.backend-web.entrypoints=${TRAEFIK_ENTRYPOINT_WEB}"
+      - "traefik.http.routers.backend-web.rule=Host(`${BACKEND_DOMAIN}`)"
+      - "traefik.http.routers.backend-web.middlewares=redirect-web-to-websecure@file"
+
+      # HTTPS
+      - "traefik.http.routers.backend.entrypoints=${TRAEFIK_ENTRYPOINT_WEBSECURE}"
+      - "traefik.http.routers.backend.rule=Host(`${BACKEND_DOMAIN}`)"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.routers.backend.tls.certresolver=${TRAEFIK_DEFAULT_CERTRESOLVER}"
+
+      # middleware security headers
+      - "traefik.http.routers.backend.middlewares=headers-secure@file"
+
+      # сервис
+      - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT}"
+
+    networks:
+      - public
+      - internal
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend/Dockerfile
+    image: ${PROJECT_NAME}_frontend
+    container_name: ${PROJECT_NAME}_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+
+      - "traefik.http.routers.frontend-web.entrypoints=${TRAEFIK_ENTRYPOINT_WEB}"
+      - "traefik.http.routers.frontend-web.rule=Host(`${FRONTEND_DOMAIN}`)"
+      - "traefik.http.routers.frontend-web.middlewares=redirect-web-to-websecure@file"
+
+      - "traefik.http.routers.frontend.entrypoints=${TRAEFIK_ENTRYPOINT_WEBSECURE}"
+      - "traefik.http.routers.frontend.rule=Host(`${FRONTEND_DOMAIN}`)"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.tls.certresolver=${TRAEFIK_DEFAULT_CERTRESOLVER}"
+
+      - "traefik.http.routers.frontend.middlewares=headers-secure@file"
+
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+    networks:
+      - public
+      - internal
+
+volumes:
+  postgres_data:
+
+networks:
+  public:
+    external: false
+  internal:
+    external: false

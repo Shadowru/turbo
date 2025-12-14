@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List
 
 from src.config import get_settings
@@ -11,6 +12,9 @@ from src.retrieval.utils import extract_known_systems, unwrap_document
 
 settings = get_settings()
 
+logger = logging.getLogger(__name__)
+
+should_retrieve = False
 
 def build_context(documents, known_systems):
     parts = []
@@ -42,10 +46,13 @@ def run_bft_analysis(bft_id: str, raw_text: str) -> Dict[str, Any]:
     hybrid_manager = get_hybrid_retrieval_manager()
     hybrid_manager.add_documents(documents, replace=True)
 
-    retrieved_docs = hybrid_manager.retrieve(
-        cleaned,
-        k=settings.retrieval_top_k,
-    )
+    retrieved_docs = [];
+
+    if should_retrieve:
+        retrieved_docs = hybrid_manager.retrieve(
+            cleaned,
+            k=settings.retrieval_top_k,
+        )
 
     context_blocks = []
     for doc in retrieved_docs:
@@ -54,9 +61,16 @@ def run_bft_analysis(bft_id: str, raw_text: str) -> Dict[str, Any]:
         context_blocks.append(f"[source={source} id={doc_id}]\n{doc.page_content}")
 
     known_systems = extract_known_systems(documents)
+    
+    logger.info(f"Known system : {known_systems}")
+    
     context = build_context(context_blocks, known_systems)#"\n\n".join(context_blocks)
 
+    logger.info(f"Context : {context}")
+
     llm_result = run_architecture_chain(cleaned, context)
+
+    logger.info(f"LLM result : {llm_result}")
 
     return {
         "bft_id": bft_id,

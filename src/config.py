@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     app_name: str = "BFT Semantic Analyzer"
     api_prefix: str = "/api/v1"
+    cors_origins: list[str] = []
 
     sqlite_path: Path = Field(default=Path("data/sqlite.db"))
     chroma_path: Path = Field(default=Path("data/chroma"))
