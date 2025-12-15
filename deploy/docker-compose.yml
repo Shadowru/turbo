@@ -11,13 +11,14 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    networks:
-      - public
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - ./letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - public
+      - internal
     env_file:
       - .env
 
@@ -81,7 +82,7 @@ services:
       - .env
     labels:
       - "traefik.enable=true"
-
+      - "traefik.docker.network=${PROJECT_NAME}_public"
       - "traefik.http.routers.frontend-web.entrypoints=${TRAEFIK_ENTRYPOINT_WEB}"
       - "traefik.http.routers.frontend-web.rule=Host(`${FRONTEND_DOMAIN}`)"
       - "traefik.http.routers.frontend-web.middlewares=redirect-web-to-websecure@file"
