@@ -6,7 +6,7 @@ WORKDIR /app
 # Установите зависимости сборки (gcc, headers), если нужны
 RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml poetry.lock* requirements.txt* ./  # адаптируйте под ваш менеджер
+COPY requirements.txt ./
 # Пример для pip:
 RUN pip install --prefix=/install -r requirements.txt
 
