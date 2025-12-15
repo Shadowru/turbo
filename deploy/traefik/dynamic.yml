@@ -10,7 +10,6 @@ http:
         frameDeny: true
         referrerPolicy: no-referrer-when-downgrade
         contentTypeNosniff: true
-        xssProtection: "1; mode=block"
         browserXssFilter: true
         forceSTSHeader: true
         stsSeconds: 15552000
