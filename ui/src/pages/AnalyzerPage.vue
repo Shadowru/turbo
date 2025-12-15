@@ -4,6 +4,9 @@ import BftForm, { type BftFormPayload } from "../components/BftForm.vue";
 import ResultViewer from "../components/ResultViewer.vue";
 import HistoryList from "../components/HistoryList.vue";
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+
 type ApiResponse = {
   bft_id: string;
   structured_output: Record<string, unknown>;
@@ -60,7 +63,7 @@ const resultCreatedAt = computed(() => {
 const fetchHistoryList = async () => {
   historyLoading.value = true;
   try {
-    const response = await fetch("http://localhost:8000/api/v1/history?limit=20");
+    const response = await fetch(`${API_BASE}/api/v1/history?limit=20`);
     if (!response.ok) {
       throw new Error(`Ошибка загрузки истории: ${await response.text()}`);
     }
@@ -75,7 +78,7 @@ const fetchHistoryList = async () => {
 
 const loadHistoryDetail = async (id: number) => {
   try {
-    const response = await fetch(`http://localhost:8000/api/v1/history/${id}`);
+    const response = await fetch(`${API_BASE}/api/v1/history/${id}`);
     if (!response.ok) {
       throw new Error(`Ошибка загрузки записи: ${await response.text()}`);
     }
@@ -102,7 +105,7 @@ const handleSubmit = async (payload: BftFormPayload) => {
   error.value = null;
 
   try {
-    const response = await fetch("http://localhost:8000/api/v1/analyze", {
+    const response = await fetch(`${API_BASE}/api/v1/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
