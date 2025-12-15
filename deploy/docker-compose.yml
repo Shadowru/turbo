@@ -61,6 +61,7 @@ services:
       - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT}"
     volumes:
       - ./logs/:/app/tmp/
+      - ./data/:/app/data/
     networks:
       - public
       - internal
